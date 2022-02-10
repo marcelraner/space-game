@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
-use std::time::Duration;
+
+use logger::debug;
 
 fn render(canvas: &mut Canvas<sdl2::video::Window>) {
     canvas.set_draw_color(sdl2::pixels::Color::RGB(255, 0, 0));
@@ -41,7 +44,7 @@ fn main() {
                     ..
                 } => break 'mainloop,
                 e => {
-                    println!("{:?}", e);
+                    debug!("{:?}", e);
                 }
             }
         }

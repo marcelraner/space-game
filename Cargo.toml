@@ -1,2 +1,2 @@
 [workspace]
-members = ["game-client"]
+members = ["game-client", "logger"]

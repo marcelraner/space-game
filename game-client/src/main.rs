@@ -21,28 +21,92 @@ trait RenderWithSdl2 {
 
 struct Spaceship {
     position: Position,
+    alignment_rad: f32,
+    alignment: Vector2<f32>,
+    rotation: f32,
+    velocity: Vector2<f32>,
 }
 
 impl Spaceship {
     fn new(position_x: i32, position_y: i32) -> Self {
+        let alignment_rad = std::f32::consts::PI / -2.0;
         Self {
             position: Position {
                 x: position_x,
                 y: position_y,
             },
+            alignment_rad,
+            alignment: Vector2::<f32> {
+                x: alignment_rad.cos(),
+                y: alignment_rad.sin(),
+            },
+            rotation: 0.0,
+            velocity: Vector2::<f32> { x: 0.0, y: 0.0 },
         }
+    }
+
+    fn move_forward(&mut self) {
+        self.velocity.x += self.alignment.x;
+        self.velocity.y += self.alignment.y;
+    }
+
+    fn move_backward(&mut self) {
+        self.velocity.x -= self.alignment.x;
+        self.velocity.y -= self.alignment.y;
+    }
+
+    fn move_left(&mut self) {
+        self.velocity.x += self.alignment.y;
+        self.velocity.y -= self.alignment.x;
+    }
+
+    fn move_right(&mut self) {
+        self.velocity.x -= self.alignment.y;
+        self.velocity.y += self.alignment.x;
+    }
+
+    fn rotate_left(&mut self) {
+        self.rotation -= 0.01;
+    }
+
+    fn rotate_right(&mut self) {
+        self.rotation += 0.01;
+    }
+
+    fn update(&mut self) {
+        // calculate position
+        self.position.x += self.velocity.x as i32;
+        self.position.y += self.velocity.y as i32;
+
+        // calculate alignment
+        self.alignment_rad += self.rotation;
+        self.alignment_rad %= std::f32::consts::PI * 2.0;
+        self.alignment.x = self.alignment_rad.cos();
+        self.alignment.y = self.alignment_rad.sin();
     }
 }
 
 impl RenderWithSdl2 for Spaceship {
     fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: Offset) {
-        let rect = sdl2::rect::Rect::new(
-            offset.x + self.position.x - 5,
-            offset.y + self.position.y - 5,
-            10,
-            10,
-        );
-        canvas.draw_rect(rect).unwrap();
+        let position_x = offset.x + self.position.x;
+        let position_y = offset.y + self.position.y;
+        canvas
+            .draw_rect(sdl2::rect::Rect::new(
+                position_x - 8,
+                position_y - 8,
+                16,
+                16,
+            ))
+            .unwrap();
+        canvas
+            .draw_line(
+                sdl2::rect::Point::new(position_x, position_y),
+                sdl2::rect::Point::new(
+                    position_x + (self.alignment.x * 24.0) as i32,
+                    position_y + (self.alignment.y * 24.0) as i32,
+                ),
+            )
+            .unwrap();
     }
 }
 
@@ -110,18 +174,28 @@ fn main() {
         let keyboard_state = event_pump.keyboard_state();
 
         // move spaceship
-        if keyboard_state.is_scancode_pressed(Scancode::Down) {
-            space.player_spaceship.position.y += 10;
+        if keyboard_state.is_scancode_pressed(Scancode::S) {
+            space.player_spaceship.move_backward();
         }
-        if keyboard_state.is_scancode_pressed(Scancode::Left) {
-            space.player_spaceship.position.x -= 10;
+        if keyboard_state.is_scancode_pressed(Scancode::W) {
+            space.player_spaceship.move_forward();
         }
-        if keyboard_state.is_scancode_pressed(Scancode::Right) {
-            space.player_spaceship.position.x += 10;
+
+        if keyboard_state.is_scancode_pressed(Scancode::A) {
+            space.player_spaceship.rotate_left();
         }
-        if keyboard_state.is_scancode_pressed(Scancode::Up) {
-            space.player_spaceship.position.y -= 10;
+        if keyboard_state.is_scancode_pressed(Scancode::D) {
+            space.player_spaceship.rotate_right();
         }
+
+        if keyboard_state.is_scancode_pressed(Scancode::Q) {
+            space.player_spaceship.move_left();
+        }
+        if keyboard_state.is_scancode_pressed(Scancode::E) {
+            space.player_spaceship.move_right();
+        }
+
+        space.player_spaceship.update();
 
         render(&mut canvas, &space);
 

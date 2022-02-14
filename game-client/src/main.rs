@@ -6,9 +6,9 @@ use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
+use sdl2::render::Texture;
 
 use logger::debug;
-use sdl2::render::Texture;
 
 struct Vector2<T> {
     x: T,
@@ -19,7 +19,7 @@ type Position = Vector2<i32>;
 type Offset = Vector2<i32>;
 
 trait RenderWithSdl2 {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset);
+    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>);
 }
 
 type TextureId = usize;
@@ -94,7 +94,7 @@ impl Spaceship {
 }
 
 impl RenderWithSdl2 for Spaceship {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset) {
+    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>) {
         let position_x = offset.x + self.position.x;
         let position_y = offset.y + self.position.y;
         canvas
@@ -114,16 +114,77 @@ impl RenderWithSdl2 for Spaceship {
                 ),
             )
             .unwrap();
+        canvas
+            .copy_ex(
+                &texture_map[self.texture_id],
+                None,
+                Rect::new(position_x - 64, position_y - 128, 128, 256),
+                ((self.alignment_rad + std::f32::consts::PI * 0.5)
+                    * 180.0
+                    * std::f32::consts::FRAC_1_PI) as f64,
+                None,
+                false,
+                false,
+            )
+            .unwrap();
+    }
+}
+
+struct Asteroid {
+    position: Position,
+    texture_id: TextureId,
+}
+
+impl Asteroid {
+    fn new(position_x: i32, position_y: i32, texture_id: TextureId) -> Self {
+        Self {
+            position: Position {
+                x: position_x,
+                y: position_y,
+            },
+            texture_id,
+        }
+    }
+}
+
+impl RenderWithSdl2 for Asteroid {
+    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>) {
+        let position_x = offset.x + self.position.x;
+        let position_y = offset.y + self.position.y;
+        canvas
+            .draw_rect(sdl2::rect::Rect::new(
+                position_x - 8,
+                position_y - 8,
+                16,
+                16,
+            ))
+            .unwrap();
+        canvas
+            .copy(
+                &texture_map[self.texture_id],
+                None,
+                Rect::new(position_x - 64, position_y - 64, 128, 128)
+            )
+            .unwrap();
     }
 }
 
 struct Space {
     player_spaceship: Spaceship,
+    asteroids: Vec<Asteroid>,
 }
 
 impl Space {
     fn new(player_spaceship: Spaceship) -> Self {
-        Self { player_spaceship }
+        Self {
+            player_spaceship,
+            asteroids: Vec::new(),
+        }
+    }
+
+    fn add_asteroid(&mut self, asteroid: Asteroid)
+    {
+        self.asteroids.push(asteroid);
     }
 }
 
@@ -137,23 +198,15 @@ fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space, texture_map: 
     canvas.set_draw_color(sdl2::pixels::Color::BLACK);
     canvas.clear();
     canvas.set_draw_color(sdl2::pixels::Color::YELLOW);
-    space.player_spaceship.render_with_sdl2(canvas, &offset);
-    let x = offset.x + space.player_spaceship.position.x;
-    let y = offset.y + space.player_spaceship.position.y;
-    canvas
-        .copy_ex(
-            &texture_map[space.player_spaceship.texture_id],
-            None,
-            Rect::new(x - 64, y - 128, 128, 256),
-            ((space.player_spaceship.alignment_rad + std::f32::consts::PI * 0.5)
-                * 180.0
-                * std::f32::consts::FRAC_1_PI) as f64,
-            None,
-            false,
-            false,
-        )
-        .unwrap();
-    debug!("x: {}, y: {}", x, y);
+
+    // render spaceship
+    space.player_spaceship.render_with_sdl2(canvas, &offset, texture_map);
+
+    // render asteroids
+    for asteroid in &space.asteroids {
+        asteroid.render_with_sdl2(canvas, &offset, texture_map);
+    }
+
     canvas.present();
 }
 
@@ -183,8 +236,26 @@ fn main() {
             .load_texture("resources/spaceship.png")
             .unwrap(),
     );
+    texture_map.push(
+        texture_creator
+            .load_texture("resources/asteroid_01.png")
+            .unwrap(),
+    );
+    texture_map.push(
+        texture_creator
+            .load_texture("resources/asteroid_02.png")
+            .unwrap(),
+    );
+    texture_map.push(
+        texture_creator
+            .load_texture("resources/asteroid_03.png")
+            .unwrap(),
+    );
 
     let mut space = Space::new(Spaceship::new(0, 0, 0));
+    space.add_asteroid(Asteroid::new(250, 0, 1));
+    space.add_asteroid(Asteroid::new(-300, 100, 2));
+    space.add_asteroid(Asteroid::new(-200, -200, 3));
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 

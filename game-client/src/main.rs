@@ -1,11 +1,14 @@
 use std::time::Duration;
 
 use sdl2::event::Event;
+use sdl2::image::LoadTexture;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
+use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 
 use logger::debug;
+use sdl2::render::Texture;
 
 struct Vector2<T> {
     x: T,
@@ -16,8 +19,10 @@ type Position = Vector2<i32>;
 type Offset = Vector2<i32>;
 
 trait RenderWithSdl2 {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: Offset);
+    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset);
 }
+
+type TextureId = usize;
 
 struct Spaceship {
     position: Position,
@@ -25,10 +30,11 @@ struct Spaceship {
     alignment: Vector2<f32>,
     rotation: f32,
     velocity: Vector2<f32>,
+    texture_id: TextureId,
 }
 
 impl Spaceship {
-    fn new(position_x: i32, position_y: i32) -> Self {
+    fn new(position_x: i32, position_y: i32, texture_id: TextureId) -> Self {
         let alignment_rad = std::f32::consts::PI / -2.0;
         Self {
             position: Position {
@@ -42,6 +48,7 @@ impl Spaceship {
             },
             rotation: 0.0,
             velocity: Vector2::<f32> { x: 0.0, y: 0.0 },
+            texture_id,
         }
     }
 
@@ -87,7 +94,7 @@ impl Spaceship {
 }
 
 impl RenderWithSdl2 for Spaceship {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: Offset) {
+    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset) {
         let position_x = offset.x + self.position.x;
         let position_y = offset.y + self.position.y;
         canvas
@@ -120,7 +127,7 @@ impl Space {
     }
 }
 
-fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space) {
+fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space, texture_map: &Vec<Texture>) {
     let window_size = canvas.window().size();
     let offset = Offset {
         x: (window_size.0 >> 1) as i32,
@@ -130,7 +137,23 @@ fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space) {
     canvas.set_draw_color(sdl2::pixels::Color::BLACK);
     canvas.clear();
     canvas.set_draw_color(sdl2::pixels::Color::YELLOW);
-    space.player_spaceship.render_with_sdl2(canvas, offset);
+    space.player_spaceship.render_with_sdl2(canvas, &offset);
+    let x = offset.x + space.player_spaceship.position.x;
+    let y = offset.y + space.player_spaceship.position.y;
+    canvas
+        .copy_ex(
+            &texture_map[space.player_spaceship.texture_id],
+            None,
+            Rect::new(x - 64, y - 128, 128, 256),
+            ((space.player_spaceship.alignment_rad + std::f32::consts::PI * 0.5)
+                * 180.0
+                * std::f32::consts::FRAC_1_PI) as f64,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
+    debug!("x: {}, y: {}", x, y);
     canvas.present();
 }
 
@@ -153,7 +176,15 @@ fn main() {
         .map_err(|e| e.to_string())
         .unwrap();
 
-    let mut space = Space::new(Spaceship::new(0, 0));
+    let texture_creator = canvas.texture_creator();
+    let mut texture_map: Vec<Texture> = Vec::new();
+    texture_map.push(
+        texture_creator
+            .load_texture("resources/spaceship.png")
+            .unwrap(),
+    );
+
+    let mut space = Space::new(Spaceship::new(0, 0, 0));
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -196,8 +227,7 @@ fn main() {
         }
 
         space.player_spaceship.update();
-
-        render(&mut canvas, &space);
+        render(&mut canvas, &space, &texture_map);
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }

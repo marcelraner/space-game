@@ -15,14 +15,42 @@ struct Vector2<T> {
     y: T,
 }
 
+impl<T> Vector2<T> {
+    fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+}
+
 type Position = Vector2<i32>;
 type Offset = Vector2<i32>;
 
 trait RenderWithSdl2 {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>);
+    fn render_with_sdl2(
+        &self,
+        canvas: &mut Canvas<sdl2::video::Window>,
+        offset: &Offset,
+        texture_map: &Vec<Texture>,
+    );
 }
 
 type TextureId = usize;
+
+// axis-aligned bounding box
+struct AABB {
+    min: Vector2<f32>,
+    max: Vector2<f32>,
+}
+
+impl AABB {
+    fn new(min: Vector2<f32>, max: Vector2<f32>) -> Self {
+        Self { min, max }
+    }
+
+    fn intersect(&self, other: &AABB) -> bool {
+        (self.min.x <= other.max.x && self.max.x >= other.min.x)
+            && (self.min.y <= other.max.y && self.max.y >= other.min.y)
+    }
+}
 
 struct Spaceship {
     position: Position,
@@ -31,6 +59,7 @@ struct Spaceship {
     rotation: f32,
     velocity: Vector2<f32>,
     texture_id: TextureId,
+    aabb: AABB,
 }
 
 impl Spaceship {
@@ -47,8 +76,12 @@ impl Spaceship {
                 y: alignment_rad.sin(),
             },
             rotation: 0.0,
-            velocity: Vector2::<f32> { x: 0.0, y: 0.0 },
+            velocity: Vector2::<f32>::new(0.0, 0.0),
             texture_id,
+            aabb: AABB::new(
+                Vector2::<f32>::new(position_x as f32 - 128.0, position_y as f32 - 128.0),
+                Vector2::<f32>::new(position_x as f32 + 128.0, position_y as f32 + 128.0),
+            ),
         }
     }
 
@@ -85,6 +118,12 @@ impl Spaceship {
         self.position.x += self.velocity.x as i32;
         self.position.y += self.velocity.y as i32;
 
+        // adjust bounding box
+        self.aabb.min.x = (self.position.x - 128) as f32;
+        self.aabb.min.y = (self.position.y - 128) as f32;
+        self.aabb.max.x = (self.position.x + 128) as f32;
+        self.aabb.max.y = (self.position.y + 128) as f32;
+
         // calculate alignment
         self.alignment_rad += self.rotation;
         self.alignment_rad %= std::f32::consts::PI * 2.0;
@@ -94,26 +133,16 @@ impl Spaceship {
 }
 
 impl RenderWithSdl2 for Spaceship {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>) {
+    fn render_with_sdl2(
+        &self,
+        canvas: &mut Canvas<sdl2::video::Window>,
+        offset: &Offset,
+        texture_map: &Vec<Texture>,
+    ) {
         let position_x = offset.x + self.position.x;
         let position_y = offset.y + self.position.y;
-        canvas
-            .draw_rect(sdl2::rect::Rect::new(
-                position_x - 8,
-                position_y - 8,
-                16,
-                16,
-            ))
-            .unwrap();
-        canvas
-            .draw_line(
-                sdl2::rect::Point::new(position_x, position_y),
-                sdl2::rect::Point::new(
-                    position_x + (self.alignment.x * 24.0) as i32,
-                    position_y + (self.alignment.y * 24.0) as i32,
-                ),
-            )
-            .unwrap();
+
+        // draw texture
         canvas
             .copy_ex(
                 &texture_map[self.texture_id],
@@ -127,12 +156,34 @@ impl RenderWithSdl2 for Spaceship {
                 false,
             )
             .unwrap();
+
+        // draw bounding box
+        canvas
+            .draw_rect(sdl2::rect::Rect::new(
+                self.aabb.min.x as i32 + offset.x,
+                self.aabb.min.y as i32 + offset.y,
+                256,
+                256,
+            ))
+            .unwrap();
+
+        // draw direction
+        canvas
+            .draw_line(
+                sdl2::rect::Point::new(position_x, position_y),
+                sdl2::rect::Point::new(
+                    position_x + (self.alignment.x * 24.0) as i32,
+                    position_y + (self.alignment.y * 24.0) as i32,
+                ),
+            )
+            .unwrap();
     }
 }
 
 struct Asteroid {
     position: Position,
     texture_id: TextureId,
+    aabb: AABB,
 }
 
 impl Asteroid {
@@ -143,28 +194,41 @@ impl Asteroid {
                 y: position_y,
             },
             texture_id,
+            aabb: AABB::new(
+                Vector2::<f32>::new(position_x as f32 - 64.0, position_y as f32 - 64.0),
+                Vector2::<f32>::new(position_x as f32 + 64.0, position_y as f32 + 64.0),
+            ),
         }
     }
 }
 
 impl RenderWithSdl2 for Asteroid {
-    fn render_with_sdl2(&self, canvas: &mut Canvas<sdl2::video::Window>, offset: &Offset, texture_map: &Vec<Texture>) {
+    fn render_with_sdl2(
+        &self,
+        canvas: &mut Canvas<sdl2::video::Window>,
+        offset: &Offset,
+        texture_map: &Vec<Texture>,
+    ) {
         let position_x = offset.x + self.position.x;
         let position_y = offset.y + self.position.y;
-        canvas
-            .draw_rect(sdl2::rect::Rect::new(
-                position_x - 8,
-                position_y - 8,
-                16,
-                16,
-            ))
-            .unwrap();
+
+        // draw texture
         canvas
             .copy(
                 &texture_map[self.texture_id],
                 None,
-                Rect::new(position_x - 64, position_y - 64, 128, 128)
+                Rect::new(position_x - 64, position_y - 64, 128, 128),
             )
+            .unwrap();
+
+        // draw bounding box
+        canvas
+            .draw_rect(sdl2::rect::Rect::new(
+                self.aabb.min.x as i32 + offset.x,
+                self.aabb.min.y as i32 + offset.y,
+                128,
+                128,
+            ))
             .unwrap();
     }
 }
@@ -182,9 +246,16 @@ impl Space {
         }
     }
 
-    fn add_asteroid(&mut self, asteroid: Asteroid)
-    {
+    fn add_asteroid(&mut self, asteroid: Asteroid) {
         self.asteroids.push(asteroid);
+    }
+}
+
+fn detect_collisions(space: &Space) {
+    for asteroid in &space.asteroids {
+        if space.player_spaceship.aabb.intersect(&asteroid.aabb) {
+            debug!("collision");
+        }
     }
 }
 
@@ -200,7 +271,9 @@ fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space, texture_map: 
     canvas.set_draw_color(sdl2::pixels::Color::YELLOW);
 
     // render spaceship
-    space.player_spaceship.render_with_sdl2(canvas, &offset, texture_map);
+    space
+        .player_spaceship
+        .render_with_sdl2(canvas, &offset, texture_map);
 
     // render asteroids
     for asteroid in &space.asteroids {
@@ -298,6 +371,9 @@ fn main() {
         }
 
         space.player_spaceship.update();
+
+        detect_collisions(&space);
+
         render(&mut canvas, &space, &texture_map);
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::time::SystemTime;
 
 use sdl2::event::Event;
 use sdl2::image::LoadTexture;
@@ -21,7 +22,7 @@ impl<T> Vector2<T> {
     }
 }
 
-type Position = Vector2<i32>;
+type Position = Vector2<f32>;
 type Offset = Vector2<i32>;
 
 trait RenderWithSdl2 {
@@ -63,7 +64,7 @@ struct Spaceship {
 }
 
 impl Spaceship {
-    fn new(position_x: i32, position_y: i32, texture_id: TextureId) -> Self {
+    fn new(position_x: f32, position_y: f32, texture_id: TextureId) -> Self {
         let alignment_rad = std::f32::consts::PI / -2.0;
         Self {
             position: Position {
@@ -79,53 +80,53 @@ impl Spaceship {
             velocity: Vector2::<f32>::new(0.0, 0.0),
             texture_id,
             aabb: AABB::new(
-                Vector2::<f32>::new(position_x as f32 - 128.0, position_y as f32 - 128.0),
-                Vector2::<f32>::new(position_x as f32 + 128.0, position_y as f32 + 128.0),
+                Vector2::<f32>::new(position_x - 128.0, position_y - 128.0),
+                Vector2::<f32>::new(position_x + 128.0, position_y + 128.0),
             ),
         }
     }
 
-    fn move_forward(&mut self) {
-        self.velocity.x += self.alignment.x;
-        self.velocity.y += self.alignment.y;
+    fn move_forward(&mut self, delta_time: f32) {
+        self.velocity.x += self.alignment.x * 100.0 * delta_time;
+        self.velocity.y += self.alignment.y * 100.0 * delta_time;
     }
 
-    fn move_backward(&mut self) {
-        self.velocity.x -= self.alignment.x;
-        self.velocity.y -= self.alignment.y;
+    fn move_backward(&mut self, delta_time: f32) {
+        self.velocity.x -= self.alignment.x * 100.0 * delta_time;
+        self.velocity.y -= self.alignment.y * 100.0 * delta_time;
     }
 
-    fn move_left(&mut self) {
-        self.velocity.x += self.alignment.y;
-        self.velocity.y -= self.alignment.x;
+    fn move_left(&mut self, delta_time: f32) {
+        self.velocity.x += self.alignment.y * 100.0 * delta_time;
+        self.velocity.y -= self.alignment.x * 100.0 * delta_time;
     }
 
-    fn move_right(&mut self) {
-        self.velocity.x -= self.alignment.y;
-        self.velocity.y += self.alignment.x;
+    fn move_right(&mut self, delta_time: f32) {
+        self.velocity.x -= self.alignment.y * 100.0 * delta_time;
+        self.velocity.y += self.alignment.x * 100.0 * delta_time;
     }
 
-    fn rotate_left(&mut self) {
-        self.rotation -= 0.01;
+    fn rotate_left(&mut self, delta_time: f32) {
+        self.rotation -= 1.0 * delta_time;
     }
 
-    fn rotate_right(&mut self) {
-        self.rotation += 0.01;
+    fn rotate_right(&mut self, delta_time: f32) {
+        self.rotation += 1.0 * delta_time;
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, delta_time: f32) {
         // calculate position
-        self.position.x += self.velocity.x as i32;
-        self.position.y += self.velocity.y as i32;
+        self.position.x += (self.velocity.x * delta_time) as f32;
+        self.position.y += (self.velocity.y * delta_time) as f32;
 
         // adjust bounding box
-        self.aabb.min.x = (self.position.x - 128) as f32;
-        self.aabb.min.y = (self.position.y - 128) as f32;
-        self.aabb.max.x = (self.position.x + 128) as f32;
-        self.aabb.max.y = (self.position.y + 128) as f32;
+        self.aabb.min.x = self.position.x - 128.0;
+        self.aabb.min.y = self.position.y - 128.0;
+        self.aabb.max.x = self.position.x + 128.0;
+        self.aabb.max.y = self.position.y + 128.0;
 
         // calculate alignment
-        self.alignment_rad += self.rotation;
+        self.alignment_rad += self.rotation * delta_time;
         self.alignment_rad %= std::f32::consts::PI * 2.0;
         self.alignment.x = self.alignment_rad.cos();
         self.alignment.y = self.alignment_rad.sin();
@@ -139,15 +140,15 @@ impl RenderWithSdl2 for Spaceship {
         offset: &Offset,
         texture_map: &Vec<Texture>,
     ) {
-        let position_x = offset.x + self.position.x;
-        let position_y = offset.y + self.position.y;
+        let position_x = offset.x + self.position.x as i32;
+        let position_y = offset.y + self.position.y as i32;
 
         // draw texture
         canvas
             .copy_ex(
                 &texture_map[self.texture_id],
                 None,
-                Rect::new(position_x - 64, position_y - 128, 128, 256),
+                Rect::new(position_x as i32 - 64, position_y as i32 - 128, 128, 256),
                 ((self.alignment_rad + std::f32::consts::PI * 0.5)
                     * 180.0
                     * std::f32::consts::FRAC_1_PI) as f64,
@@ -187,7 +188,7 @@ struct Asteroid {
 }
 
 impl Asteroid {
-    fn new(position_x: i32, position_y: i32, texture_id: TextureId) -> Self {
+    fn new(position_x: f32, position_y: f32, texture_id: TextureId) -> Self {
         Self {
             position: Position {
                 x: position_x,
@@ -195,8 +196,8 @@ impl Asteroid {
             },
             texture_id,
             aabb: AABB::new(
-                Vector2::<f32>::new(position_x as f32 - 64.0, position_y as f32 - 64.0),
-                Vector2::<f32>::new(position_x as f32 + 64.0, position_y as f32 + 64.0),
+                Vector2::<f32>::new(position_x - 64.0, position_y - 64.0),
+                Vector2::<f32>::new(position_x + 64.0, position_y + 64.0),
             ),
         }
     }
@@ -209,8 +210,8 @@ impl RenderWithSdl2 for Asteroid {
         offset: &Offset,
         texture_map: &Vec<Texture>,
     ) {
-        let position_x = offset.x + self.position.x;
-        let position_y = offset.y + self.position.y;
+        let position_x = offset.x + self.position.x as i32;
+        let position_y = offset.y + self.position.y as i32;
 
         // draw texture
         canvas
@@ -284,6 +285,8 @@ fn render(canvas: &mut Canvas<sdl2::video::Window>, space: &Space, texture_map: 
 }
 
 fn main() {
+    let mut current_time = SystemTime::now();
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -297,7 +300,7 @@ fn main() {
 
     let mut canvas = window
         .into_canvas()
-        .software()
+        //.software()
         .build()
         .map_err(|e| e.to_string())
         .unwrap();
@@ -325,14 +328,17 @@ fn main() {
             .unwrap(),
     );
 
-    let mut space = Space::new(Spaceship::new(0, 0, 0));
-    space.add_asteroid(Asteroid::new(250, 0, 1));
-    space.add_asteroid(Asteroid::new(-300, 100, 2));
-    space.add_asteroid(Asteroid::new(-200, -200, 3));
+    let mut space = Space::new(Spaceship::new(0.0, 0.0, 0));
+    space.add_asteroid(Asteroid::new(250.0, 0.0, 1));
+    space.add_asteroid(Asteroid::new(-300.0, 100.0, 2));
+    space.add_asteroid(Asteroid::new(-200.0, -200.0, 3));
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     'mainloop: loop {
+        let frame_time = current_time.elapsed().unwrap();
+        current_time = SystemTime::now();
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -348,30 +354,32 @@ fn main() {
 
         let keyboard_state = event_pump.keyboard_state();
 
+        let frame_time_secs = frame_time.as_secs_f32();
+        debug!("frame_time: {:?}", frame_time_secs);
+
         // move spaceship
         if keyboard_state.is_scancode_pressed(Scancode::S) {
-            space.player_spaceship.move_backward();
+            space.player_spaceship.move_backward(frame_time_secs);
         }
         if keyboard_state.is_scancode_pressed(Scancode::W) {
-            space.player_spaceship.move_forward();
+            space.player_spaceship.move_forward(frame_time_secs);
         }
 
         if keyboard_state.is_scancode_pressed(Scancode::A) {
-            space.player_spaceship.rotate_left();
+            space.player_spaceship.rotate_left(frame_time_secs);
         }
         if keyboard_state.is_scancode_pressed(Scancode::D) {
-            space.player_spaceship.rotate_right();
+            space.player_spaceship.rotate_right(frame_time_secs);
         }
 
         if keyboard_state.is_scancode_pressed(Scancode::Q) {
-            space.player_spaceship.move_left();
+            space.player_spaceship.move_left(frame_time_secs);
         }
         if keyboard_state.is_scancode_pressed(Scancode::E) {
-            space.player_spaceship.move_right();
+            space.player_spaceship.move_right(frame_time_secs);
         }
 
-        space.player_spaceship.update();
-
+        space.player_spaceship.update(frame_time_secs);
         detect_collisions(&space);
 
         render(&mut canvas, &space, &texture_map);
